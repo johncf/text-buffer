@@ -55,7 +55,26 @@ impl IntervalSet {
     }
 
     pub fn add(&mut self, iv: Interval) {
-        unimplemented!();
+        match self.0.binary_search(&iv) {
+            Ok(_) => {},
+            Err(i) => {
+                let prev = self.0[i-1];
+                let next = if self.0.len() == i { None } else { Some(self.0[i]) };
+                if (prev.beg < iv.beg && iv.end <= prev.end) || next.map_or(false, |next| iv.beg == next.beg && iv.end < next.end) {
+                    // do nothing
+                } else if iv.beg <= prev.end && prev.end < iv.end {
+                    // elongate prev forwards and check for possible merges ahead
+                    unimplemented!();
+                } else if prev.end < iv.beg && next.map_or(true, |next| iv.end < next.beg) {
+                    self.0.insert(i, iv);
+                } else if prev.end < iv.beg && next.map_or(false, |next| iv.beg <= next.beg && next.beg < iv.end) {
+                    // elongate next backwards and check for possible merges ahead
+                    unimplemented!();
+                } else {
+                    unreachable!("Bug! prev: {:?}, next: {:?}, iv: {:?}", prev, next, iv);
+                }
+            }
+        }
     }
 }
 
