@@ -1,0 +1,7 @@
+[package]
+name = "text-buffer"
+version = "0.1.0"
+authors = ["johncf <johncf@protonmail.com>"]
+
+[dependencies]
+xi-rope = "^0.2"
