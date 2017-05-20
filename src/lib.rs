@@ -2,7 +2,7 @@ extern crate xi_rope as rope;
 
 mod interval;
 
-use interval::{Interval, IntervalSet};
+use interval::{Interval, IntervalSet, IntervalSpace, InfoTy};
 
 use rope::Rope;
 
@@ -18,13 +18,28 @@ struct Wall {
 }
 
 struct Mask {
-    inner: Vec<MaskPiece>, // FIXME optimize; use a tree
+    inner: IntervalSet<MaskSpace>,
+}
+
+struct MaskSpace {
     wall: WallView,
 }
 
-struct MaskPiece {
-    range: Interval,
-    nbreaks: usize,
+impl IntervalSpace for MaskSpace {
+    type Info = Breaks;
+
+    fn compute_info(&self, iv: Interval) -> Breaks {
+        Breaks(0) // TODO
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Breaks(usize);
+
+impl InfoTy for Breaks {
+    fn combine(&self, other: &Breaks) -> Breaks {
+        Breaks(self.0 + other.0)
+    }
 }
 
 struct WallView {
@@ -33,7 +48,7 @@ struct WallView {
 }
 
 struct WallHistEntry {
-    added: IntervalSet,
+    added: IntervalSet<interval::NulSpace>,
     version: u64,
 }
 
