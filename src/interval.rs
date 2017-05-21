@@ -57,20 +57,7 @@ pub struct IntervalSet<I: IntervalSpace> {
     inner: Vec<IntervalWrap<I::Info>>, // FIXME optimize; use a tree?
 }
 
-impl<I: IntervalSpace> IntervalSet<I> {
-    fn get_space(&self) -> &I {
-        &self.space
-    }
-
-    /// Note: info for shifted intervals are not recomputed. If shifts are not hollow, then info
-    ///       for the added parts alone are computed and then they are combined with the info of
-    ///       those intervals they are combined with.
-    fn update_space(&mut self, new_space: I, shifts: Vec<ISpaceShift>, shifts_are_hollow: bool) {
-        self.space = new_space;
-        unimplemented!()
-    }
-}
-
+#[derive(Clone, Copy)]
 pub struct ISpaceShift {
     index: usize,
     offset: usize, // only positive shifts are allowed -- the space can only grow
@@ -156,6 +143,64 @@ impl<I: IntervalSpace> IntervalSet<I> {
         self.inner.drain(idx..idx + j);
         end
     }
+
+    pub fn get_space(&self) -> &I {
+        &self.space
+    }
+
+    /// Note: info for shifted intervals are not recomputed. If shifts are not hollow, then info
+    ///       for the added parts alone are computed and then they are combined with the info of
+    ///       those intervals they are combined with.
+    pub fn update_space(&mut self, new_space: I, shifts: Vec<ISpaceShift>, shifts_are_hollow: bool) {
+        let mut cumulative_shift = 0;
+        let mut shift_iter = shifts.into_iter();
+        let mut shift_peek = shift_iter.next();
+        let mut split_add = Vec::new(); // only when not shifts_are_hollow
+        for iv_wrap in &mut self.inner {
+            if let Some(ISpaceShift { index, offset }) = shift_peek {
+                let index_map = index + cumulative_shift;
+                if iv_wrap.iv.beg < index {
+                    iv_wrap.iv.beg += cumulative_shift;
+                    if iv_wrap.iv.end < index {
+                        iv_wrap.iv.end += cumulative_shift;
+                    } else if iv_wrap.iv.end == index {
+                        if shifts_are_hollow {
+                            iv_wrap.iv.end += cumulative_shift;
+                        } else {
+                            iv_wrap.iv.end += cumulative_shift + offset;
+                            iv_wrap.info = iv_wrap.info.combine(&new_space.compute_info((index_map, index_map + offset).into()))
+                        }
+                    } else {
+                        let new_end = iv_wrap.iv.end + cumulative_shift + offset;
+                        if shifts_are_hollow {
+                            iv_wrap.iv.end = new_end;
+                            iv_wrap.info = iv_wrap.info.combine(&new_space.compute_info((index_map, index_map + offset).into()))
+                        } else {
+                            split_add.push((index_map + offset, new_end));
+                            iv_wrap.iv.end = index_map;
+                            iv_wrap.info = new_space.compute_info(iv_wrap.iv);
+                        }
+                    }
+                } else if iv_wrap.iv.beg == index {
+                    iv_wrap.iv.beg += cumulative_shift;
+                    iv_wrap.iv.end += cumulative_shift + offset;
+                    if shifts_are_hollow {
+                        iv_wrap.iv.beg += offset;
+                    } else {
+                        iv_wrap.info = iv_wrap.info.combine(&new_space.compute_info((index_map, index_map + offset).into()))
+                    }
+                } else {
+                    shift_peek = shift_iter.next();
+                    cumulative_shift += offset;
+                }
+            } else {
+                iv_wrap.iv.beg += cumulative_shift;
+                iv_wrap.iv.end += cumulative_shift;
+            }
+        }
+        self.space = new_space;
+        self.extend(split_add);
+    }
 }
 
 impl<T, I> Extend<T> for IntervalSet<I>
@@ -173,7 +218,7 @@ where T: Into<Interval>,
 
 #[cfg(test)]
 mod tests {
-    use super::{IntervalSet, NulSpace};
+    use super::{IntervalSet, NulSpace, ISpaceShift};
 
     #[test]
     fn interval_set_add() {
@@ -184,5 +229,16 @@ mod tests {
         assert_eq!(ivs, &[(3, 9)]);
         ivs.extend(vec![(7, 8), (11, 13), (15, 16), (18, 19), (10, 17)]);
         assert_eq!(ivs, &[(3, 9), (10, 17), (18, 19)]);
+    }
+
+    #[test]
+    fn interval_set_space() {
+        let mut ivs = IntervalSet::new(NulSpace);
+        ivs.extend(vec![(3, 5), (7, 9)]);
+        ivs.update_space(NulSpace, vec![ISpaceShift { index: 7, offset: 2 }], true);
+        assert_eq!(ivs, &[(3, 5), (9, 11)]);
+        ivs.update_space(NulSpace, vec![ISpaceShift { index: 9, offset: 2 }], false);
+        assert_eq!(ivs, &[(3, 5), (9, 13)]);
+        // TODO more tests (with space info too)
     }
 }
