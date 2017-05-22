@@ -34,6 +34,12 @@ impl InfoTy for () {
     fn combine(&self, _: &()) -> () { () }
 }
 
+impl InfoTy for usize {
+    fn combine(&self, other: &usize) -> usize {
+        *self + *other
+    }
+}
+
 #[derive(Clone, Debug)]
 struct IntervalWrap<T: InfoTy> {
     iv: Interval,
@@ -69,15 +75,6 @@ where I: IntervalSpace,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.inner.fmt(f)
-    }
-}
-
-impl<'a, T, U> PartialEq<&'a [T]> for IntervalSet<U>
-where T: Into<Interval> + Copy,
-      U: IntervalSpace
-{
-    fn eq(&self, other: &&'a[T]) -> bool {
-        self.inner.len() == other.len() && self.inner.iter().zip(*other).all(|(this, other)| this.iv == (*other).into())
     }
 }
 
@@ -173,12 +170,12 @@ impl<I: IntervalSpace> IntervalSet<I> {
                     } else {
                         let new_end = iv_wrap.iv.end + cumulative_shift + offset;
                         if shifts_are_hollow {
-                            iv_wrap.iv.end = new_end;
-                            iv_wrap.info = iv_wrap.info.combine(&new_space.compute_info((index_map, index_map + offset).into()))
-                        } else {
                             split_add.push((index_map + offset, new_end));
                             iv_wrap.iv.end = index_map;
                             iv_wrap.info = new_space.compute_info(iv_wrap.iv);
+                        } else {
+                            iv_wrap.iv.end = new_end;
+                            iv_wrap.info = iv_wrap.info.combine(&new_space.compute_info((index_map, index_map + offset).into()))
                         }
                     }
                 } else if iv_wrap.iv.beg == index {
@@ -218,27 +215,47 @@ where T: Into<Interval>,
 
 #[cfg(test)]
 mod tests {
-    use super::{IntervalSet, NulSpace, ISpaceShift};
+    use super::*;
+
+    impl<'a, T> PartialEq<&'a [(usize, usize, T::Info)]> for IntervalSet<T>
+    where T: IntervalSpace,
+          T::Info: PartialEq
+    {
+        fn eq(&self, other: &&'a[(usize, usize, T::Info)]) -> bool {
+            self.inner.len() == other.len() && self.inner.iter().zip(*other).all(|(this, other)| this.iv == Interval::from((other.0, other.1)) && this.info == other.2)
+        }
+    }
 
     #[test]
     fn interval_set_add() {
         let mut ivs = IntervalSet::new(NulSpace);
         ivs.extend(vec![(7, 9), (3, 5)]);
-        assert_eq!(ivs, &[(3, 5), (7, 9)]);
+        assert_eq!(ivs, &[(3, 5, ()), (7, 9, ())]);
         ivs.add((5, 7));
-        assert_eq!(ivs, &[(3, 9)]);
+        assert_eq!(ivs, &[(3, 9, ())]);
         ivs.extend(vec![(7, 8), (11, 13), (15, 16), (18, 19), (10, 17)]);
-        assert_eq!(ivs, &[(3, 9), (10, 17), (18, 19)]);
+        assert_eq!(ivs, &[(3, 9, ()), (10, 17, ()), (18, 19, ())]);
+    }
+
+    struct TestSpace;
+
+    impl IntervalSpace for TestSpace {
+        type Info = usize;
+
+        fn compute_info(&self, iv: Interval) -> usize {
+            iv.end - iv.beg
+        }
     }
 
     #[test]
     fn interval_set_space() {
-        let mut ivs = IntervalSet::new(NulSpace);
+        let mut ivs = IntervalSet::new(TestSpace);
         ivs.extend(vec![(3, 5), (7, 9)]);
-        ivs.update_space(NulSpace, vec![ISpaceShift { index: 7, offset: 2 }], true);
-        assert_eq!(ivs, &[(3, 5), (9, 11)]);
-        ivs.update_space(NulSpace, vec![ISpaceShift { index: 9, offset: 2 }], false);
-        assert_eq!(ivs, &[(3, 5), (9, 13)]);
-        // TODO more tests (with space info too)
+        ivs.update_space(TestSpace, vec![ISpaceShift { index: 7, offset: 2 }], true);
+        assert_eq!(ivs, &[(3, 5, 2), (9, 11, 2)]);
+        ivs.update_space(TestSpace, vec![ISpaceShift { index: 9, offset: 2 }], false);
+        assert_eq!(ivs, &[(3, 5, 2), (9, 13, 4)]);
+        ivs.update_space(TestSpace, vec![ISpaceShift { index: 10, offset: 2 }], true);
+        assert_eq!(ivs, &[(3, 5, 2), (9, 10, 1), (12, 15, 3)]);
     }
 }

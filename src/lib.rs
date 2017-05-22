@@ -26,19 +26,10 @@ struct MaskSpace {
 }
 
 impl IntervalSpace for MaskSpace {
-    type Info = Breaks;
+    type Info = usize;
 
-    fn compute_info(&self, iv: Interval) -> Breaks {
-        Breaks(0) // TODO
-    }
-}
-
-#[derive(Clone, Debug)]
-struct Breaks(usize);
-
-impl InfoTy for Breaks {
-    fn combine(&self, other: &Breaks) -> Breaks {
-        Breaks(self.0 + other.0)
+    fn compute_info(&self, iv: Interval) -> usize {
+        0 // TODO
     }
 }
 
