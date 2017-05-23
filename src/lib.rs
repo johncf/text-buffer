@@ -1,8 +1,8 @@
 extern crate xi_rope as rope;
 
-mod interval;
+pub mod interval;
 
-use interval::{Interval, IntervalSet, IntervalSpace, InfoTy};
+use interval::{Interval, IntervalSet, IntervalSpace};
 
 use rope::Rope;
 
@@ -28,7 +28,7 @@ struct MaskSpace {
 impl IntervalSpace for MaskSpace {
     type Info = usize;
 
-    fn compute_info(&self, iv: Interval) -> usize {
+    fn compute_info(&self, _iv: Interval) -> usize {
         0 // TODO
     }
 }
@@ -42,8 +42,3 @@ struct WallHistEntry {
     added: IntervalSet<interval::NulSpace>,
     version: u64,
 }
-
-//struct MaskNode {
-//    left_nbreaks: usize,
-//    left_size: usize,
-//}
