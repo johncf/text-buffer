@@ -2,7 +2,7 @@ extern crate xi_rope as rope;
 
 pub mod interval;
 
-use interval::{Interval, IntervalSet, IntervalSpace};
+use interval::Interval;
 
 use rope::Rope;
 
@@ -13,32 +13,38 @@ pub struct Buffer {
 
 struct Wall {
     inner: Rope,
-    hist: Vec<WallHistEntry>,
-    version: u64,
+    hist: WallHistory,
+    version: u32,
+}
+
+struct WallHistory {
+    entries: Vec<WallAdd>, // sorted
+}
+
+struct WallAdd {
+    version: u32, // sorted on this
+    index: usize,
+    size: usize,
 }
 
 struct Mask {
-    inner: IntervalSet<MaskSpace>,
+    inner: StrSpanSet,
+    hist: UndoHistory,
 }
 
-struct MaskSpace {
-    wall: WallView,
+type StrSpanSet = !; // TODO a unitree with StrSpan as leaves
+
+struct StrSpan {
+    offset: usize,
+    size: usize,
+    lines: usize, // number of lines in this span
 }
 
-impl IntervalSpace for MaskSpace {
-    type Info = usize;
-
-    fn compute_info(&self, _iv: Interval) -> usize {
-        0 // TODO
-    }
+struct UndoHistory { // linear undo history
+    inner: Vec<UndoEntry>,
 }
 
-struct WallView {
-    inner: Rope,
-    version: u64,
-}
-
-struct WallHistEntry {
-    added: IntervalSet<interval::NulSpace>,
-    version: u64,
+struct UndoEntry {
+    flips: Vec<Interval>, // intervals that change visibility
+    wall_version: u32, // version of the wall intervals are based on
 }
